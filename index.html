@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sudoku Master | Kshitij Workshop</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f4f4f4;
+      font-family: 'Segoe UI', sans-serif;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .header img {
+      height: 60px;
+      margin-right: 15px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(9, 40px);
+      grid-template-rows: repeat(9, 40px);
+      gap: 2px;
+      justify-content: center;
+    }
+    .cell {
+      text-align: center;
+      font-size: 18px;
+      border: 1px solid #999;
+      background-color: #fff;
+    }
+    .cell.prefilled {
+      background-color: #ddd;
+      pointer-events: none;
+    }
+    .cell.invalid {
+      background-color: #ffcccc;
+    }
+    .controls, .stats {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .success-msg, .error-msg {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="https://cdn-icons-png.flaticon.com/512/3242/3242257.png" alt="Sudoku Icon">
+    <div>
+      <h1>Sudoku Master</h1>
+    </div>
+  </div>
+
+  <div id="sudoku-board" class="grid"></div>
+
+  <div class="controls">
+    <button class="btn btn-primary" onclick="checkSolution()">Check Solution</button>
+    <button class="btn btn-warning" onclick="resetBoard()">Reset</button>
+    <button class="btn btn-success" onclick="generatePuzzle()">New Game</button>
+    <div id="message" class="success-msg"></div>
+  </div>
+
+  <div class="stats">
+    <p>Puzzles Solved: <span id="puzzlesSolved">0</span></p>
+    <p>Total Time: <span id="totalTime">0</span> sec</p>
+    <p>Fastest Time: <span id="fastestTime">--</span> sec</p>
+    <button class="btn btn-outline-danger" onclick="resetStats()">Reset Stats</button>
+  </div>
+
+  <script>
+    const board = document.getElementById("sudoku-board");
+    const message = document.getElementById("message");
+    const puzzlesSolved = document.getElementById("puzzlesSolved");
+    const totalTime = document.getElementById("totalTime");
+    const fastestTime = document.getElementById("fastestTime");
+
+    let fullSolution = [];
+    let prefilled = [];
+    let timer = 0;
+    let interval;
+
+    function startTimer() {
+      timer = 0;
+      interval = setInterval(() => {
+        timer++;
+        totalTime.textContent = parseInt(localStorage.getItem('totalTime') || 0) + timer;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(interval);
+      const currentFastest = parseInt(localStorage.getItem('fastestTime') || Infinity);
+      if (timer < currentFastest) localStorage.setItem('fastestTime', timer);
+      localStorage.setItem('totalTime', parseInt(localStorage.getItem('totalTime') || 0) + timer);
+    }
+
+    function resetStats() {
+      localStorage.removeItem('puzzlesSolved');
+      localStorage.removeItem('totalTime');
+      localStorage.removeItem('fastestTime');
+      updateStats();
+    }
+
+    function updateStats() {
+      puzzlesSolved.textContent = localStorage.getItem('puzzlesSolved') || 0;
+      totalTime.textContent = localStorage.getItem('totalTime') || 0;
+      const fastest = localStorage.getItem('fastestTime');
+      fastestTime.textContent = fastest ? fastest : '--';
+    }
+
+    function generateEmptyGrid() {
+      board.innerHTML = "";
+      for (let r = 0; r < 9; r++) {
+        fullSolution[r] = [];
+        prefilled[r] = [];
+        for (let c = 0; c < 9; c++) {
+          const input = document.createElement("input");
+          input.type = "text";
+          input.maxLength = 1;
+          input.className = "cell";
+          input.dataset.row = r;
+          input.dataset.col = c;
+          board.appendChild(input);
+        }
+      }
+    }
+
+    function fillGrid(grid) {
+      [...board.children].forEach((cell, index) => {
+        const r = Math.floor(index / 9);
+        const c = index % 9;
+        cell.value = grid[r][c] !== 0 ? grid[r][c] : "";
+        cell.classList.toggle("prefilled", grid[r][c] !== 0);
+        cell.disabled = grid[r][c] !== 0;
+      });
+    }
+
+    function generateFullSolution(grid = Array.from({ length: 9 }, () => Array(9).fill(0)), row = 0, col = 0) {
+      if (row === 9) return true;
+      if (col === 9) return generateFullSolution(grid, row + 1, 0);
+      if (grid[row][col] !== 0) return generateFullSolution(grid, row, col + 1);
+
+      const nums = [...Array(9).keys()].map(x => x + 1).sort(() => Math.random() - 0.5);
+      for (let num of nums) {
+        if (isSafe(grid, row, col, num)) {
+          grid[row][col] = num;
+          if (generateFullSolution(grid, row, col + 1)) return true;
+          grid[row][col] = 0;
+        }
+      }
+      return false;
+    }
+
+    function isSafe(grid, row, col, num) {
+      for (let i = 0; i < 9; i++)
+        if (grid[row][i] === num || grid[i][col] === num || grid[3 * Math.floor(row / 3) + Math.floor(i / 3)][3 * Math.floor(col / 3) + i % 3] === num)
+          return false;
+      return true;
+    }
+
+    function removeCells(grid, clues = 30) {
+      const puzzle = grid.map(row => [...row]);
+      let count = 81 - clues;
+      while (count > 0) {
+        const r = Math.floor(Math.random() * 9);
+        const c = Math.floor(Math.random() * 9);
+        if (puzzle[r][c] !== 0) {
+          puzzle[r][c] = 0;
+          count--;
+        }
+      }
+      return puzzle;
+    }
+
+    function checkSolution() {
+      const userGrid = Array.from({ length: 9 }, () => Array(9).fill(0));
+      let correct = true;
+      [...board.children].forEach((cell, index) => {
+        const r = Math.floor(index / 9);
+        const c = index % 9;
+        const val = parseInt(cell.value);
+        if (!val || val !== fullSolution[r][c]) {
+          cell.classList.add("invalid");
+          correct = false;
+        } else {
+          cell.classList.remove("invalid");
+        }
+      });
+      if (correct) {
+        message.textContent = "🎉 Puzzle Solved!";
+        stopTimer();
+        let solved = parseInt(localStorage.getItem('puzzlesSolved') || 0) + 1;
+        localStorage.setItem('puzzlesSolved', solved);
+        updateStats();
+      } else {
+        message.textContent = "❌ Some numbers are incorrect.";
+      }
+    }
+
+    function resetBoard() {
+      if (!confirm("Reset all inputs?")) return;
+      [...board.children].forEach(cell => {
+        if (!cell.classList.contains("prefilled")) {
+          cell.value = "";
+          cell.classList.remove("invalid");
+        }
+      });
+      message.textContent = "";
+    }
+
+    function generatePuzzle() {
+      clearInterval(interval);
+      startTimer();
+      generateEmptyGrid();
+      const grid = Array.from({ length: 9 }, () => Array(9).fill(0));
+      generateFullSolution(grid);
+      fullSolution = grid.map(row => [...row]);
+      const puzzle = removeCells(grid);
+      fillGrid(puzzle);
+      message.textContent = "";
+    }
+
+    window.onload = () => {
+      updateStats();
+      generatePuzzle();
+    };
+  </script>
+</body>
+</html>
